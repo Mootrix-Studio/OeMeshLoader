@@ -12,9 +12,27 @@
 #define OEMESH_FUNC_IMPL static
 #define OEMESH_PRIV static
 
+#define OEMESH_MESH_FACES_COUNT 6
+
 typedef struct OeMeshColor {
     uint8_t r, g, b, a;
 } OeMeshColor;
+
+typedef struct OeMeshVec3i {
+    int x, y, z;
+} OeMeshVec3i;
+
+typedef struct OeMeshVec3 {
+    float x, y, z;
+} OeMeshVec3;
+
+typedef struct OeMeshQuat {
+    float x, y, z, w;
+} OeMeshQuat;
+
+typedef struct OeMeshVec2i {
+    int x, y;
+} OeMeshVec2i;
 
 typedef struct OeMeshTexture {
     int32_t w, h;
@@ -22,9 +40,9 @@ typedef struct OeMeshTexture {
 } OeMeshTexture;
 
 typedef struct OeMeshTransform {
-    float x_translation, y_translation, z_translation;
-    float x_rotation, y_rotation, z_rotation, w_rotation;
-    float x_scale, y_scale, z_scale, w_scale;
+    OeMeshVec3 translation;
+    OeMeshQuat rotation;
+    OeMeshVec3 scale;
 } OeMeshTransform;
 
 typedef struct OeMeshCoordChange {
@@ -35,7 +53,7 @@ typedef struct OeMeshCoordChange {
 typedef struct OeMeshFrameMesh {
     struct OeMeshFrameMesh *mesh;
     OeMeshTransform transform;
-    OeMeshCoordChange coordChange[6];
+    OeMeshCoordChange coordChange[OEMESH_MESH_FACES_COUNT];
 } OeMeshFrameMesh;
 
 typedef struct OeMeshFrame {
@@ -53,9 +71,12 @@ typedef struct OeAnim {
 struct OeMeshMesh;
 
 typedef struct OeMeshMesh {
+    struct OeMeshMesh *parent;
     const char *name;
     OeMeshTransform transform;
-    struct OeMeshMesh *parent;
+    OeMeshVec3 origin;
+    OeMeshVec3i pixel_size;
+    OeMeshVec2i tex_coords[OEMESH_MESH_FACES_COUNT];
 } OeMeshMesh;
 
 typedef struct OeMeshModel {
@@ -188,6 +209,28 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
             } else {
                 model->meshes[i].parent = &model->meshes[i];
             }
+
+            if (!oemesh_priv_read(&buffer, &model->meshes[i].transform, sizeof(OeMeshTransform))) {
+                return false;
+            }
+
+            if (!oemesh_priv_read(&buffer, &model->meshes[i].origin, sizeof(OeMeshVec3))) {
+                return false;
+            }
+
+            if (!oemesh_priv_read_str(&buffer, &model->meshes[i].name)) {
+                return false;
+            }
+
+            if (!oemesh_priv_read(&buffer, &model->meshes[i].pixel_size, sizeof(OeMeshVec3i))) {
+                return false;
+            }
+
+            for (int j = 0; j < OEMESH_MESH_FACES_COUNT; ++j) {
+                if (!oemesh_priv_read(&buffer, &model->meshes[i].tex_coords[j], sizeof(OeMeshVec2i))) {
+                    return false;
+                }
+            }
         }
 
         uint32_t animations_count;
@@ -207,7 +250,6 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
             model->animations[i].frames_count = frames_count;
             model->animations[i].frames = OEMESH_MALLOC(frames_count * sizeof(OeMeshFrame));
             for (uint32_t j = 0; j < frames_count; j++) {
-                model->animations[i].frames[j];
 
                 if (!oemesh_priv_read(&buffer, &model->animations[i].frames[j].duration, sizeof(float))) {
                     return false;
@@ -227,7 +269,7 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
                         return false;
                     }
 
-                    for (int l = 0; l < 6; ++l) {
+                    for (int l = 0; l < OEMESH_MESH_FACES_COUNT; ++l) {
                         bool has_change;
                         if (!oemesh_priv_read(&buffer, &has_change, sizeof(has_change))) {
                             return false;
@@ -245,9 +287,11 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
                 }
             }
         }
+    } else {
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 OEMESH_FUNC_IMPL void oemesh_unload_model(OeMeshModel *model) {
