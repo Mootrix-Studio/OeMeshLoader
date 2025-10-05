@@ -71,7 +71,7 @@ typedef struct OeAnim {
 struct OeMeshMesh;
 
 typedef struct OeMeshMesh {
-    struct OeMeshMesh *parent;
+    int parent;
     const char *name;
     OeMeshTransform transform;
     OeMeshVec3 origin;
@@ -116,7 +116,7 @@ OEMESH_PRIV bool oemesh_priv_read(OeMeshPrivBuffer *buffer, void *container, siz
 OEMESH_PRIV bool oemesh_priv_read_str(OeMeshPrivBuffer *buffer, const char **container) {
     uint32_t str_size;
     if (oemesh_priv_read(buffer, &str_size, sizeof(str_size))) {
-        char *result = OEMESH_MALLOC(str_size + 1);
+        char *result = (char *) OEMESH_MALLOC(str_size + 1);
         if (oemesh_priv_read(buffer, result, str_size)) {
             result[str_size] = 0;
             *container = result;
@@ -187,7 +187,7 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
         }
 
         const size_t pixels_count = model->texture.w * model->texture.h;
-        model->texture.pixels = OEMESH_MALLOC(pixels_count * sizeof(OeMeshTexture));
+        model->texture.pixels = (OeMeshColor *) OEMESH_MALLOC(pixels_count * sizeof(OeMeshTexture));
         if (!oemesh_priv_read(&buffer, model->texture.pixels, pixels_count * sizeof(OeMeshColor))) {
             return false;
         }
@@ -198,16 +198,16 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
         }
 
         model->meshes_count = meshes_count;
-        model->meshes = OEMESH_MALLOC(meshes_count * sizeof(OeMeshMesh));
+        model->meshes = (OeMeshMesh *) OEMESH_MALLOC(meshes_count * sizeof(OeMeshMesh));
         for (uint32_t i = 0; i < meshes_count; i++) {
             int32_t parent;
             if (!oemesh_priv_read(&buffer, &parent, sizeof(parent))) {
                 return false;
             }
             if (parent >= 0) {
-                model->meshes[i].parent = NULL;
+                model->meshes[i].parent = parent;
             } else {
-                model->meshes[i].parent = &model->meshes[i];
+                model->meshes[i].parent = -1;
             }
 
             if (!oemesh_priv_read(&buffer, &model->meshes[i].transform, sizeof(OeMeshTransform))) {
@@ -238,7 +238,7 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
             return false;
         }
         model->animations_count = animations_count;
-        model->animations = OEMESH_MALLOC(animations_count * sizeof(OeAnim));
+        model->animations = (OeAnim *) OEMESH_MALLOC(animations_count * sizeof(OeAnim));
         for (uint32_t i = 0; i < animations_count; i++) {
             if (!oemesh_priv_read_str(&buffer, &model->animations[i].name)) {
                 return false;
@@ -248,9 +248,8 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
                 return false;
             }
             model->animations[i].frames_count = frames_count;
-            model->animations[i].frames = OEMESH_MALLOC(frames_count * sizeof(OeMeshFrame));
+            model->animations[i].frames = (OeMeshFrame *) OEMESH_MALLOC(frames_count * sizeof(OeMeshFrame));
             for (uint32_t j = 0; j < frames_count; j++) {
-
                 if (!oemesh_priv_read(&buffer, &model->animations[i].frames[j].duration, sizeof(float))) {
                     return false;
                 }
@@ -261,7 +260,8 @@ OEMESH_FUNC_IMPL bool oemesh_load_model_from_memory(OeMeshModel *model, const ch
                 }
 
                 model->animations[i].frames[j].meshes_count = meshes_animated_count;
-                model->animations[i].frames[j].meshes = OEMESH_MALLOC(meshes_animated_count * sizeof(OeMeshFrameMesh));
+                model->animations[i].frames[j].meshes = (OeMeshFrameMesh *) OEMESH_MALLOC(
+                    meshes_animated_count * sizeof(OeMeshFrameMesh));
 
                 for (uint32_t k = 0; k < meshes_animated_count; k++) {
                     if (!oemesh_priv_read(&buffer, &model->animations[i].frames[j].meshes[k].transform,
